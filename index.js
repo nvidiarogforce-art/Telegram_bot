@@ -94,6 +94,13 @@ app.post("/telegram-webhook", async (req, res) => {
       text: reply.slice(0, 4096),
       reply_to_message_id: message.message_id
     });
+
+    if (adminChatId && String(message.chat.id) !== String(adminChatId)) {
+      await telegram("sendMessage", {
+        chat_id: adminChatId,
+        text: `🤖 AI reply sent\\n\\nTo: ${sender}\\nUser: ${message.text}\\nAI: ${reply.slice(0, 3500)}`
+      }).catch((error) => console.error("Admin reply notification failed:", error));
+    }
   } catch (error) {
     console.error(error);
     await telegram("sendMessage", {
