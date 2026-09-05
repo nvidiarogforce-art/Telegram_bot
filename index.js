@@ -61,7 +61,7 @@ app.post("/telegram-webhook", async (req, res) => {
   if (adminChatId && String(message.chat.id) !== String(adminChatId)) {
     await telegram("sendMessage", {
       chat_id: adminChatId,
-      text: `📥 New bot message\\n\\nFrom: ${sender}\\nMessage: ${message.text}`
+      text: `📥 New bot message\n\nFrom: ${sender}\nMessage: ${message.text}`
     }).catch((error) => console.error("Admin notification failed:", error));
   }
 
