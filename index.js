@@ -1,5 +1,6 @@
 import express from "express";
 import "dotenv/config";
+
 const required = ["TELEGRAM_BOT_TOKEN", "GEMINI_API_KEY"];
 for (const name of required) {
   if (!process.env[name]) throw new Error(`Missing environment variable: ${name}`);
@@ -9,7 +10,8 @@ const app = express();
 app.use(express.json({ limit: "1mb" }));
 
 const telegramApi = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
-const geminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const geminiModel = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
+const adminChatId = process.env.ADMIN_CHAT_ID;
 const processedMessages = new Set();
 
 const personality = `
@@ -49,6 +51,19 @@ app.post("/telegram-webhook", async (req, res) => {
   if (processedMessages.has(messageKey)) return;
   processedMessages.add(messageKey);
   if (processedMessages.size > 5000) processedMessages.delete(processedMessages.values().next().value);
+
+  const sender = message.from?.username
+    ? `@${message.from.username}`
+    : message.from?.first_name || "Unknown user";
+
+  console.log(`Incoming message from ${sender} (${message.chat.id}): ${message.text}`);
+
+  if (adminChatId && String(message.chat.id) !== String(adminChatId)) {
+    await telegram("sendMessage", {
+      chat_id: adminChatId,
+      text: `📥 New bot message\\n\\nFrom: ${sender}\\nMessage: ${message.text}`
+    }).catch((error) => console.error("Admin notification failed:", error));
+  }
 
   try {
     const response = await fetch(
