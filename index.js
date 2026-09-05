@@ -58,13 +58,6 @@ app.post("/telegram-webhook", async (req, res) => {
 
   console.log(`Incoming message from ${sender} (${message.chat.id}): ${message.text}`);
 
-  if (adminChatId && String(message.chat.id) !== String(adminChatId)) {
-    await telegram("sendMessage", {
-      chat_id: adminChatId,
-      text: `📥 New bot message\n\nFrom: ${sender}\nMessage: ${message.text}`
-    }).catch((error) => console.error("Admin notification failed:", error));
-  }
-
   try {
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${process.env.GEMINI_API_KEY}`,
