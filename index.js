@@ -72,6 +72,9 @@ app.get("/", (_req, res) => {
 });
 
 app.post("/telegram-webhook", async (req, res) => {
+  // Acknowledge Telegram immediately, then process the update in the background.
+  res.sendStatus(200);
+
   const message = req.body?.message;
   if (!message?.text || !message.chat?.id) return;
 
