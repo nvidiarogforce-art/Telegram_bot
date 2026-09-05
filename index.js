@@ -61,7 +61,7 @@ app.post("/telegram-webhook", async (req, res) => {
   const message = req.body?.message;
   if (!message?.text || !message.chat?.id) return;
 
-  const command = message.text.trim().split(/\\s+/)[0].split("@")[0].toLowerCase();
+  const command = message.text.trim().split(/\s+/)[0].split("@")[0].toLowerCase();
   if (commandResponses[command]) {
     await telegram("sendMessage", {
       chat_id: message.chat.id,
