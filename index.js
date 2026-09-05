@@ -85,7 +85,8 @@ app.post("/telegram-webhook", async (req, res) => {
     await telegram("sendMessage", {
       chat_id: message.chat.id,
       text: reply.slice(0, 4096),
-      reply_to_message_id: message.message_id
+      reply_to_message_id: message.message_id,
+      reply_markup: { remove_keyboard: true }
     });
 
     if (adminChatId && String(message.chat.id) !== String(adminChatId)) {
