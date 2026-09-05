@@ -19,7 +19,6 @@ The creator is Nizomiddin, an 11th-grade student interested in Computer Science,
 AI, machine learning, game development, Unity, C#, Blender, Minecraft modding, and 3D projects.
 He enjoys building experimental software projects and learning by making things.
 His long-term direction is studying Computer Science or a related AI/technology field.
-Keep this profile brief and use only these approved facts.
 `;
 
 const botCommands = [
