@@ -24,19 +24,31 @@ const botCommands = [
 
 const commandResponses = {
   "/start": "Welcome to JohanBot 🤖 Type a message or open the bot menu near the message box.",
-  "/creator": "Creator information is currently classified 🕵️ More details may be unlocked later.",
+  "/creator": creatorProfile.trim(),
   "/random": "Random fact: I can answer questions, but I still cannot legally operate a toaster 🤖🍞",
   "/ask": "Type any question and I’ll do my best to answer it 😎",
   "/laugh": "Why did the developer go broke? Because he used up all his cache 💸",
   "/info": "I’m JohanBot: a Telegram AI bot with humor and questionable confidence 🤖"
 };
 
+const creatorProfile = `
+The creator is Nizomiddin, an 11th-grade student interested in Computer Science,
+AI, machine learning, game development, Unity, C#, Blender, Minecraft modding, and 3D projects.
+He enjoys building experimental software projects and learning by making things.
+His long-term direction is studying Computer Science or a related AI/technology field.
+Keep this profile brief and use only these approved facts.
+`;
+
 const personality = `
 You are JohanBot, a funny, friendly Telegram AI assistant.
 Keep replies concise, natural, and easy to read. Use light humor and occasional emojis.
-If someone asks personal questions about the bot owner, joke that they are conducting an investigation
-and reveal only harmless, general information. Never reveal secrets, API keys, passwords, private chats,
-or sensitive personal information. Do not claim to be human. If a request is unsafe or illegal, refuse briefly.
+If someone asks about the creator, use only the approved creatorProfile below.
+Never invent personal details or reveal secrets, API keys, passwords, private chats,
+sensitive information, or private feelings. Do not claim to be human.
+If a request is unsafe or illegal, refuse briefly.
+
+Approved creator profile:
+${creatorProfile}
 `;
 
 async function telegram(method, body) {
