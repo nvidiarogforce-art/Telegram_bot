@@ -14,28 +14,21 @@ const geminiModel = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
 const adminChatId = process.env.ADMIN_CHAT_ID;
 const processedMessages = new Set();
 
-const mainKeyboard = {
-  inline_keyboard: [
-    [
-      { text: "👤 About the creator", callback_data: "creator_info" },
-      { text: "🎲 Random fact", callback_data: "random_fact" }
-    ],
-    [
-      { text: "🧠 Ask the AI", callback_data: "ask_ai" },
-      { text: "😂 Make me laugh", callback_data: "make_me_laugh" }
-    ],
-    [
-      { text: "🛠 Bot information", callback_data: "bot_info" }
-    ]
-  ]
-};
+const botCommands = [
+  { command: "creator", description: "About the creator" },
+  { command: "random", description: "Get a random fact" },
+  { command: "ask", description: "Ask the AI anything" },
+  { command: "laugh", description: "Make me laugh" },
+  { command: "info", description: "About JohanBot" }
+];
 
-const buttonResponses = {
-  creator_info: "The creator is currently classified information 🕵️ Ask again after the next security update.",
-  random_fact: "Random fact: I can answer questions, but I still cannot legally operate a toaster 🤖🍞",
-  ask_ai: "Send me any question and I’ll do my best to answer it 😎",
-  make_me_laugh: "Why did the developer go broke? Because he used up all his cache 💸",
-  bot_info: "I’m JohanBot: a Telegram AI bot with humor, buttons, and questionable confidence 🤖"
+const commandResponses = {
+  "/start": "Welcome to JohanBot 🤖 Type a message or open the bot menu near the message box.",
+  "/creator": "Creator information is currently classified 🕵️ More details may be unlocked later.",
+  "/random": "Random fact: I can answer questions, but I still cannot legally operate a toaster 🤖🍞",
+  "/ask": "Type any question and I’ll do my best to answer it 😎",
+  "/laugh": "Why did the developer go broke? Because he used up all his cache 💸",
+  "/info": "I’m JohanBot: a Telegram AI bot with humor and questionable confidence 🤖"
 };
 
 const personality = `
@@ -65,31 +58,18 @@ app.get("/", (_req, res) => {
 });
 
 app.post("/telegram-webhook", async (req, res) => {
-  const callback = req.body?.callback_query;
-  if (callback?.id && callback.message?.chat?.id) {
-    res.sendStatus(200);
-
-    await telegram("answerCallbackQuery", {
-      callback_query_id: callback.id
-    }).catch((error) => console.error("Callback acknowledgement failed:", error));
-
-    const responseText = buttonResponses[callback.data]
-      || "That button is still under investigation 🕵️";
-
-    await telegram("sendMessage", {
-      chat_id: callback.message.chat.id,
-      text: responseText,
-      reply_markup: mainKeyboard
-    }).catch((error) => console.error("Button response failed:", error));
-
-    return;
-  }
-
-  // Acknowledge Telegram immediately so it does not retry the same update.
-  res.sendStatus(200);
-
   const message = req.body?.message;
   if (!message?.text || !message.chat?.id) return;
+
+  const command = message.text.trim().split(/\\s+/)[0].split("@")[0].toLowerCase();
+  if (commandResponses[command]) {
+    await telegram("sendMessage", {
+      chat_id: message.chat.id,
+      text: commandResponses[command],
+      reply_to_message_id: message.message_id
+    });
+    return;
+  }
 
   const messageKey = `${message.chat.id}:${message.message_id}`;
   if (processedMessages.has(messageKey)) return;
@@ -129,8 +109,7 @@ app.post("/telegram-webhook", async (req, res) => {
     await telegram("sendMessage", {
       chat_id: message.chat.id,
       text: reply.slice(0, 4096),
-      reply_to_message_id: message.message_id,
-      reply_markup: mainKeyboard
+      reply_to_message_id: message.message_id
     });
 
     if (adminChatId && String(message.chat.id) !== String(adminChatId)) {
@@ -150,4 +129,9 @@ app.post("/telegram-webhook", async (req, res) => {
 });
 
 const port = Number(process.env.PORT || 3000);
-app.listen(port, () => console.log(`JohanBot listening on port ${port}`));
+app.listen(port, () => {
+  console.log(`JohanBot listening on port ${port}`);
+  telegram("setMyCommands", { commands: botCommands })
+    .then(() => telegram("setChatMenuButton", { menu_button: { type: "commands" } }))
+    .catch((error) => console.error("Bot menu setup failed:", error));
+});
