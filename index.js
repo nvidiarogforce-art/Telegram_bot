@@ -14,6 +14,14 @@ const geminiModel = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
 const adminChatId = process.env.ADMIN_CHAT_ID;
 const processedMessages = new Set();
 
+const creatorProfile = `
+The creator is Nizomiddin, an 11th-grade student interested in Computer Science,
+AI, machine learning, game development, Unity, C#, Blender, Minecraft modding, and 3D projects.
+He enjoys building experimental software projects and learning by making things.
+His long-term direction is studying Computer Science or a related AI/technology field.
+Keep this profile brief and use only these approved facts.
+`;
+
 const botCommands = [
   { command: "creator", description: "About the creator" },
   { command: "random", description: "Get a random fact" },
@@ -31,13 +39,7 @@ const commandResponses = {
   "/info": "I’m JohanBot: a Telegram AI bot with humor and questionable confidence 🤖"
 };
 
-const creatorProfile = `
-The creator is Nizomiddin, an 11th-grade student interested in Computer Science,
-AI, machine learning, game development, Unity, C#, Blender, Minecraft modding, and 3D projects.
-He enjoys building experimental software projects and learning by making things.
-His long-term direction is studying Computer Science or a related AI/technology field.
-Keep this profile brief and use only these approved facts.
-`;
+
 
 const personality = `
 You are JohanBot, a funny, friendly Telegram AI assistant.
