@@ -14,6 +14,30 @@ const geminiModel = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
 const adminChatId = process.env.ADMIN_CHAT_ID;
 const processedMessages = new Set();
 
+const mainKeyboard = {
+  inline_keyboard: [
+    [
+      { text: "👤 About the creator", callback_data: "creator_info" },
+      { text: "🎲 Random fact", callback_data: "random_fact" }
+    ],
+    [
+      { text: "🧠 Ask the AI", callback_data: "ask_ai" },
+      { text: "😂 Make me laugh", callback_data: "make_me_laugh" }
+    ],
+    [
+      { text: "🛠 Bot information", callback_data: "bot_info" }
+    ]
+  ]
+};
+
+const buttonResponses = {
+  creator_info: "The creator is currently classified information 🕵️ Ask again after the next security update.",
+  random_fact: "Random fact: I can answer questions, but I still cannot legally operate a toaster 🤖🍞",
+  ask_ai: "Send me any question and I’ll do my best to answer it 😎",
+  make_me_laugh: "Why did the developer go broke? Because he used up all his cache 💸",
+  bot_info: "I’m JohanBot: a Telegram AI bot with humor, buttons, and questionable confidence 🤖"
+};
+
 const personality = `
 You are JohanBot, a funny, friendly Telegram AI assistant.
 Keep replies concise, natural, and easy to read. Use light humor and occasional emojis.
@@ -41,6 +65,26 @@ app.get("/", (_req, res) => {
 });
 
 app.post("/telegram-webhook", async (req, res) => {
+  const callback = req.body?.callback_query;
+  if (callback?.id && callback.message?.chat?.id) {
+    res.sendStatus(200);
+
+    await telegram("answerCallbackQuery", {
+      callback_query_id: callback.id
+    }).catch((error) => console.error("Callback acknowledgement failed:", error));
+
+    const responseText = buttonResponses[callback.data]
+      || "That button is still under investigation 🕵️";
+
+    await telegram("sendMessage", {
+      chat_id: callback.message.chat.id,
+      text: responseText,
+      reply_markup: mainKeyboard
+    }).catch((error) => console.error("Button response failed:", error));
+
+    return;
+  }
+
   // Acknowledge Telegram immediately so it does not retry the same update.
   res.sendStatus(200);
 
@@ -86,7 +130,7 @@ app.post("/telegram-webhook", async (req, res) => {
       chat_id: message.chat.id,
       text: reply.slice(0, 4096),
       reply_to_message_id: message.message_id,
-      reply_markup: { remove_keyboard: true }
+      reply_markup: mainKeyboard
     });
 
     if (adminChatId && String(message.chat.id) !== String(adminChatId)) {
