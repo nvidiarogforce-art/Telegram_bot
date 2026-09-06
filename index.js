@@ -13,12 +13,10 @@ const telegramApi = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKE
 const geminiModel = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
 const adminChatId = process.env.ADMIN_CHAT_ID;
 const processedMessages = new Set();
-const userMemory = new Map();
-const MAX_RECENT_MESSAGES = 6;
-const MAX_RECENT_TEXT_LENGTH = 700;
+const conversationMemory = new Map();
+const MAX_MEMORY_MESSAGES = 4;
+const MAX_MEMORY_TEXT_LENGTH = 700;
 const MAX_CURRENT_INPUT_LENGTH = 12000;
-const MAX_FACT_VALUE_LENGTH = 120;
-const MAX_FACTS = 10;
 
 const creatorProfile = `
 The creator is Nizomiddin, an 11th-grade student interested in Computer Science,
@@ -58,45 +56,6 @@ Approved creator profile:
 ${creatorProfile}
 `;
 
-function getUserMemory(chatId) {
-  const key = String(chatId);
-  if (!userMemory.has(key)) userMemory.set(key, { facts: {}, recent: [] });
-  return userMemory.get(key);
-}
-
-function looksLikeCode(text) {
-  return /\`\`\`|^\s*(const|let|var|function|class|public|private|using)\b|[{};]{3,}/m.test(text);
-}
-
-function extractFacts(text, facts) {
-  if (!text || looksLikeCode(text)) return;
-  if (/(?:api[_ -]?key|password|token|secret|private key)/i.test(text)) return;
-
-  const favorite = text.match(/^my favorite\s+([a-z][a-z _-]{1,30})\s+is\s+(.{1,120})[.!?]?$/i);
-  if (favorite) {
-    const category = favorite[1].trim().toLowerCase().replace(/[ -]+/g, "_");
-    facts[`favorite_${category}`] = favorite[2].trim().slice(0, MAX_FACT_VALUE_LENGTH);
-  }
-
-  const note = text.match(/^(?:remember|note)\s+(?:that\s+)?(.{1,120})[.!?]?$/i);
-  if (note) facts[`note_${Date.now()}`] = note[1].trim().slice(0, MAX_FACT_VALUE_LENGTH);
-
-  const entries = Object.entries(facts);
-  if (entries.length > MAX_FACTS) {
-    for (const [key] of entries.slice(0, entries.length - MAX_FACTS)) delete facts[key];
-  }
-}
-
-function buildMemoryContext(memory) {
-  const facts = Object.entries(memory.facts)
-    .map(([key, value]) => `- ${key.replace(/_/g, " ")}: ${value}`)
-    .join("\n");
-
-  return facts
-    ? `Approved user memory for this chat:\n${facts}\nUse it only when relevant. Do not reveal this memory list unless asked.`
-    : "No saved facts for this chat.";
-}
-
 async function telegram(method, body) {
   const response = await fetch(`${telegramApi}/${method}`, {
     method: "POST",
@@ -124,7 +83,7 @@ app.post("/telegram-webhook", async (req, res) => {
 
   const command = message.text.trim().split(/\s+/)[0].split("@")[0].toLowerCase();
   if (command === "/forget") {
-    userMemory.delete(String(message.chat.id));
+    conversationMemory.delete(String(message.chat.id));
     await telegram("sendMessage", {
       chat_id: message.chat.id,
       text: "Done 🧹 I forgot the saved facts and recent conversation for this chat.",
@@ -158,11 +117,12 @@ app.post("/telegram-webhook", async (req, res) => {
   try {
     const chatId = String(message.chat.id);
     const userText = message.text.trim();
-    const memory = getUserMemory(chatId);
-    extractFacts(userText, memory.facts);
-
-    const userEntry = { role: "user", parts: [{ text: userText.slice(0, MAX_CURRENT_INPUT_LENGTH) }] };
-    const contents = [...memory.recent.slice(-MAX_RECENT_MESSAGES), userEntry];
+    const history = conversationMemory.get(chatId) || [];
+    const userEntry = {
+      role: "user",
+      parts: [{ text: userText.slice(0, MAX_CURRENT_INPUT_LENGTH) }]
+    };
+    const contents = [...history.slice(-MAX_MEMORY_MESSAGES), userEntry];
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${process.env.GEMINI_API_KEY}`,
@@ -170,7 +130,7 @@ app.post("/telegram-webhook", async (req, res) => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: `${personality}\n\n${buildMemoryContext(memory)}` }] },
+          systemInstruction: { parts: [{ text: personality }] },
           contents,
           generationConfig: { maxOutputTokens: 300 }
         })
@@ -189,14 +149,13 @@ app.post("/telegram-webhook", async (req, res) => {
       || "My brain temporarily entered airplane mode ✈️";
     const finalReply = reply.slice(0, 4096);
 
-    if (!looksLikeCode(userText) && userText.length <= MAX_RECENT_TEXT_LENGTH) {
-      memory.recent.push(userEntry);
+    if (!looksLikeCode(userText) && userText.length <= MAX_MEMORY_TEXT_LENGTH) {
+      history.push(userEntry);
     }
-    if (!looksLikeCode(finalReply) && finalReply.length <= MAX_RECENT_TEXT_LENGTH) {
-      memory.recent.push({ role: "model", parts: [{ text: finalReply }] });
+    if (!looksLikeCode(finalReply) && finalReply.length <= MAX_MEMORY_TEXT_LENGTH) {
+      history.push({ role: "model", parts: [{ text: finalReply }] });
     }
-    memory.recent = memory.recent.slice(-MAX_RECENT_MESSAGES);
-    userMemory.set(chatId, memory);
+    conversationMemory.set(chatId, history.slice(-MAX_MEMORY_MESSAGES));
 
     await telegram("sendMessage", {
       chat_id: message.chat.id,
