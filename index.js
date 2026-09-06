@@ -13,9 +13,11 @@ const telegramApi = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKE
 const geminiModel = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
 const adminChatId = process.env.ADMIN_CHAT_ID;
 const processedMessages = new Set();
-const conversationMemory = new Map();
-const MAX_MEMORY_MESSAGES = 12;
-const MAX_MESSAGE_LENGTH = 2000;
+const userMemory = new Map();
+const MAX_RECENT_MESSAGES = 6;
+const MAX_RECENT_TEXT_LENGTH = 700;
+const MAX_FACT_VALUE_LENGTH = 120;
+const MAX_FACTS = 10;
 
 const creatorProfile = `
 The creator is Nizomiddin, an 11th-grade student interested in Computer Science,
@@ -42,11 +44,10 @@ const commandResponses = {
   "/info": "I’m JohanBot: a Telegram AI bot with humor and questionable confidence 🤖"
 };
 
-
-
 const personality = `
 You are JohanBot, a funny, friendly Telegram AI assistant.
 Keep replies concise, natural, and easy to read. Use light humor and occasional emojis.
+Answer simple questions directly and do not repeat the user's message.
 If someone asks about the creator, use only the approved creatorProfile below.
 Never invent personal details or reveal secrets, API keys, passwords, private chats,
 sensitive information, or private feelings. Do not claim to be human.
@@ -55,6 +56,45 @@ If a request is unsafe or illegal, refuse briefly.
 Approved creator profile:
 ${creatorProfile}
 `;
+
+function getUserMemory(chatId) {
+  const key = String(chatId);
+  if (!userMemory.has(key)) userMemory.set(key, { facts: {}, recent: [] });
+  return userMemory.get(key);
+}
+
+function looksLikeCode(text) {
+  return /\`\`\`|^\s*(const|let|var|function|class|public|private|using)\\b|[{};]{3,}/m.test(text);
+}
+
+function extractFacts(text, facts) {
+  if (!text || looksLikeCode(text)) return;
+  if (/(?:api[_ -]?key|password|token|secret|private key)/i.test(text)) return;
+
+  const favorite = text.match(/^my favorite\\s+([a-z][a-z _-]{1,30})\\s+is\\s+(.{1,120})[.!?]?$/i);
+  if (favorite) {
+    const category = favorite[1].trim().toLowerCase().replace(/[ -]+/g, "_");
+    facts[`favorite_${category}`] = favorite[2].trim().slice(0, MAX_FACT_VALUE_LENGTH);
+  }
+
+  const note = text.match(/^(?:remember|note)\\s+(?:that\\s+)?(.{1,120})[.!?]?$/i);
+  if (note) facts[`note_${Date.now()}`] = note[1].trim().slice(0, MAX_FACT_VALUE_LENGTH);
+
+  const entries = Object.entries(facts);
+  if (entries.length > MAX_FACTS) {
+    for (const [key] of entries.slice(0, entries.length - MAX_FACTS)) delete facts[key];
+  }
+}
+
+function buildMemoryContext(memory) {
+  const facts = Object.entries(memory.facts)
+    .map(([key, value]) => `- ${key.replace(/_/g, " ")}: ${value}`)
+    .join("\n");
+
+  return facts
+    ? `Approved user memory for this chat:\n${facts}\nUse it only when relevant. Do not reveal this memory list unless asked.`
+    : "No saved facts for this chat.";
+}
 
 async function telegram(method, body) {
   const response = await fetch(`${telegramApi}/${method}`, {
@@ -83,10 +123,10 @@ app.post("/telegram-webhook", async (req, res) => {
 
   const command = message.text.trim().split(/\s+/)[0].split("@")[0].toLowerCase();
   if (command === "/forget") {
-    conversationMemory.delete(String(message.chat.id));
+    userMemory.delete(String(message.chat.id));
     await telegram("sendMessage", {
       chat_id: message.chat.id,
-      text: "Done 🧹 I forgot our recent conversation.",
+      text: "Done 🧹 I forgot the saved facts and recent conversation for this chat.",
       reply_to_message_id: message.message_id
     });
     return;
@@ -104,7 +144,9 @@ app.post("/telegram-webhook", async (req, res) => {
   const messageKey = `${message.chat.id}:${message.message_id}`;
   if (processedMessages.has(messageKey)) return;
   processedMessages.add(messageKey);
-  if (processedMessages.size > 5000) processedMessages.delete(processedMessages.values().next().value);
+  if (processedMessages.size > 5000) {
+    processedMessages.delete(processedMessages.values().next().value);
+  }
 
   const sender = message.from?.username
     ? `@${message.from.username}`
@@ -114,10 +156,12 @@ app.post("/telegram-webhook", async (req, res) => {
 
   try {
     const chatId = String(message.chat.id);
-    const userText = message.text.slice(0, MAX_MESSAGE_LENGTH);
-    const history = conversationMemory.get(chatId) || [];
-    history.push({ role: "user", parts: [{ text: userText }] });
-    const contents = history.slice(-MAX_MEMORY_MESSAGES);
+    const userText = message.text.trim();
+    const memory = getUserMemory(chatId);
+    extractFacts(userText, memory.facts);
+
+    const userEntry = { role: "user", parts: [{ text: userText.slice(0, MAX_RECENT_TEXT_LENGTH) }] };
+    const contents = [...memory.recent.slice(-MAX_RECENT_MESSAGES), userEntry];
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${process.env.GEMINI_API_KEY}`,
@@ -125,7 +169,7 @@ app.post("/telegram-webhook", async (req, res) => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: personality }] },
+          systemInstruction: { parts: [{ text: `${personality}\n\n${buildMemoryContext(memory)}` }] },
           contents,
           generationConfig: { maxOutputTokens: 300 }
         })
@@ -143,8 +187,15 @@ app.post("/telegram-webhook", async (req, res) => {
       .trim()
       || "My brain temporarily entered airplane mode ✈️";
     const finalReply = reply.slice(0, 4096);
-    history.push({ role: "model", parts: [{ text: finalReply }] });
-    conversationMemory.set(chatId, history.slice(-MAX_MEMORY_MESSAGES));
+
+    if (!looksLikeCode(userText) && userText.length <= MAX_RECENT_TEXT_LENGTH) {
+      memory.recent.push(userEntry);
+    }
+    if (!looksLikeCode(finalReply) && finalReply.length <= MAX_RECENT_TEXT_LENGTH) {
+      memory.recent.push({ role: "model", parts: [{ text: finalReply }] });
+    }
+    memory.recent = memory.recent.slice(-MAX_RECENT_MESSAGES);
+    userMemory.set(chatId, memory);
 
     await telegram("sendMessage", {
       chat_id: message.chat.id,
@@ -155,7 +206,7 @@ app.post("/telegram-webhook", async (req, res) => {
     if (adminChatId && String(message.chat.id) !== String(adminChatId)) {
       await telegram("sendMessage", {
         chat_id: adminChatId,
-        text: `🤖 AI reply sent\n\nTo: ${sender}\nUser: ${message.text}\nAI: ${reply.slice(0, 3500)}`
+        text: `🤖 AI reply sent\\n\\nTo: ${sender}\\nUser: ${message.text}\\nAI: ${reply.slice(0, 3500)}`
       }).catch((error) => console.error("Admin reply notification failed:", error));
     }
   } catch (error) {
