@@ -13,6 +13,9 @@ const telegramApi = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKE
 const geminiModel = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
 const adminChatId = process.env.ADMIN_CHAT_ID;
 const processedMessages = new Set();
+const conversationMemory = new Map();
+const MAX_MEMORY_MESSAGES = 12;
+const MAX_MESSAGE_LENGTH = 2000;
 
 const creatorProfile = `
 The creator is Nizomiddin, an 11th-grade student interested in Computer Science,
@@ -26,7 +29,8 @@ const botCommands = [
   { command: "random", description: "Get a random fact" },
   { command: "ask", description: "Ask the AI anything" },
   { command: "laugh", description: "Make me laugh" },
-  { command: "info", description: "About JohanBot" }
+  { command: "info", description: "About JohanBot" },
+  { command: "forget", description: "Forget our conversation" }
 ];
 
 const commandResponses = {
@@ -78,6 +82,16 @@ app.post("/telegram-webhook", async (req, res) => {
   if (!message?.text || !message.chat?.id) return;
 
   const command = message.text.trim().split(/\s+/)[0].split("@")[0].toLowerCase();
+  if (command === "/forget") {
+    conversationMemory.delete(String(message.chat.id));
+    await telegram("sendMessage", {
+      chat_id: message.chat.id,
+      text: "Done 🧹 I forgot our recent conversation.",
+      reply_to_message_id: message.message_id
+    });
+    return;
+  }
+
   if (commandResponses[command]) {
     await telegram("sendMessage", {
       chat_id: message.chat.id,
@@ -99,6 +113,12 @@ app.post("/telegram-webhook", async (req, res) => {
   console.log(`Incoming message from ${sender} (${message.chat.id}): ${message.text}`);
 
   try {
+    const chatId = String(message.chat.id);
+    const userText = message.text.slice(0, MAX_MESSAGE_LENGTH);
+    const history = conversationMemory.get(chatId) || [];
+    history.push({ role: "user", parts: [{ text: userText }] });
+    const contents = history.slice(-MAX_MEMORY_MESSAGES);
+
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
@@ -106,7 +126,7 @@ app.post("/telegram-webhook", async (req, res) => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: personality }] },
-          contents: [{ role: "user", parts: [{ text: message.text }] }],
+          contents,
           generationConfig: { maxOutputTokens: 300 }
         })
       }
@@ -122,9 +142,13 @@ app.post("/telegram-webhook", async (req, res) => {
       .join("")
       .trim()
       || "My brain temporarily entered airplane mode ✈️";
+    const finalReply = reply.slice(0, 4096);
+    history.push({ role: "model", parts: [{ text: finalReply }] });
+    conversationMemory.set(chatId, history.slice(-MAX_MEMORY_MESSAGES));
+
     await telegram("sendMessage", {
       chat_id: message.chat.id,
-      text: reply.slice(0, 4096),
+      text: finalReply,
       reply_to_message_id: message.message_id
     });
 
