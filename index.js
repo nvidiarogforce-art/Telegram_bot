@@ -64,20 +64,20 @@ function getUserMemory(chatId) {
 }
 
 function looksLikeCode(text) {
-  return /\`\`\`|^\s*(const|let|var|function|class|public|private|using)\\b|[{};]{3,}/m.test(text);
+  return /\`\`\`|^\s*(const|let|var|function|class|public|private|using)\b|[{};]{3,}/m.test(text);
 }
 
 function extractFacts(text, facts) {
   if (!text || looksLikeCode(text)) return;
   if (/(?:api[_ -]?key|password|token|secret|private key)/i.test(text)) return;
 
-  const favorite = text.match(/^my favorite\\s+([a-z][a-z _-]{1,30})\\s+is\\s+(.{1,120})[.!?]?$/i);
+  const favorite = text.match(/^my favorite\s+([a-z][a-z _-]{1,30})\s+is\s+(.{1,120})[.!?]?$/i);
   if (favorite) {
     const category = favorite[1].trim().toLowerCase().replace(/[ -]+/g, "_");
     facts[`favorite_${category}`] = favorite[2].trim().slice(0, MAX_FACT_VALUE_LENGTH);
   }
 
-  const note = text.match(/^(?:remember|note)\\s+(?:that\\s+)?(.{1,120})[.!?]?$/i);
+  const note = text.match(/^(?:remember|note)\s+(?:that\s+)?(.{1,120})[.!?]?$/i);
   if (note) facts[`note_${Date.now()}`] = note[1].trim().slice(0, MAX_FACT_VALUE_LENGTH);
 
   const entries = Object.entries(facts);
