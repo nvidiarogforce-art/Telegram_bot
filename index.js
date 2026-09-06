@@ -16,6 +16,7 @@ const processedMessages = new Set();
 const userMemory = new Map();
 const MAX_RECENT_MESSAGES = 6;
 const MAX_RECENT_TEXT_LENGTH = 700;
+const MAX_CURRENT_INPUT_LENGTH = 12000;
 const MAX_FACT_VALUE_LENGTH = 120;
 const MAX_FACTS = 10;
 
@@ -160,7 +161,7 @@ app.post("/telegram-webhook", async (req, res) => {
     const memory = getUserMemory(chatId);
     extractFacts(userText, memory.facts);
 
-    const userEntry = { role: "user", parts: [{ text: userText.slice(0, MAX_RECENT_TEXT_LENGTH) }] };
+    const userEntry = { role: "user", parts: [{ text: userText.slice(0, MAX_CURRENT_INPUT_LENGTH) }] };
     const contents = [...memory.recent.slice(-MAX_RECENT_MESSAGES), userEntry];
 
     const response = await fetch(
