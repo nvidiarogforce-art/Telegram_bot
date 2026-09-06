@@ -18,6 +18,10 @@ const MAX_MEMORY_MESSAGES = 4;
 const MAX_MEMORY_TEXT_LENGTH = 700;
 const MAX_CURRENT_INPUT_LENGTH = 12000;
 
+function looksLikeCode(text) {
+  return /\`\`\`|^\s*(const|let|var|function|class|public|private|using)\b|[{};]{3,}/m.test(text);
+}
+
 const creatorProfile = `
 The creator is Nizomiddin, an 11th-grade student interested in Computer Science,
 AI, machine learning, game development, Unity, C#, Blender, Minecraft modding, and 3D projects.
